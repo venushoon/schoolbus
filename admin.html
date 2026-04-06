@@ -1,15 +1,169 @@
-<script>
-  // 1. 노선 선택 시 해당 데이터를 실시간으로 가져옴
-  function loadStops(route) {
-    db.ref('stops/' + route).on('value', (snap) => {
-      const data = [];
-      snap.forEach(child => { data.push({ key: child.key, ...child.val() }); });
-      renderList(data); // 위/아래 이동 버튼이 포함된 목록 렌더링
-    });
-  }
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>송남초 스쿨버스 관리자</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+    .container { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; }
+    @media (max-width: 800px) { .container { grid-template-columns: 1fr; } }
+    .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    h2 { margin-top: 0; color: #2c3e50; border-left: 5px solid #4CAF50; padding-left: 10px; font-size: 18px; }
+    #map { width: 100%; height: 350px; border-radius: 8px; margin: 10px 0; border: 1px solid #ddd; }
+    input { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+    .btn-main { background: #4CAF50; color: white; border: none; padding: 15px; border-radius: 6px; width: 100%; font-weight: bold; cursor: pointer; margin-bottom: 5px; }
+    .btn-save { background: #FF9800; margin-top: 10px; font-size: 16px; }
+    .stop-item { display: flex; align-items: center; padding: 12px; background: #fff; border: 1px solid #eee; border-radius: 8px; margin-bottom: 8px; }
+    .stop-info { flex-grow: 1; margin: 0 10px; }
+    .order-btns { display: flex; flex-direction: column; gap: 2px; }
+    .order-btn { padding: 4px 8px; font-size: 10px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; }
+    .del-btn { background: #ffeded; color: #d32f2f; border: 1px solid #ffcdd2; padding: 8px; cursor: pointer; border-radius: 4px; font-size: 12px; }
+    .route-sel { width: 100%; padding: 10px; margin-bottom: 15px; font-weight: bold; border-radius: 6px; border: 2px solid #4CAF50; }
+  </style>
 
-  // 2. 최종 저장 시 해당 노드(stops/1호차)를 전체 덮어쓰기
-  function saveAll(route, dataArray) {
-    db.ref('stops/' + route).set(dataArray);
-  }
-</script>
+  <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-database-compat.js"></script>
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_API_KEY&libraries=services"></script>
+</head>
+<body>
+
+  <h1 style="text-align:center; color:#2c3e50;">🚌 노선 마스터 관리자 (Firebase)</h1>
+
+  <div class="container">
+    <div class="card">
+      <h2>📍 정류장 등록 및 수정</h2>
+      <select id="routeSelect" class="route-sel" onchange="changeRoute()">
+        <option value="1호차">1호차 노선 편집</option>
+        <option value="2호차">2호차 노선 편집</option>
+      </select>
+      <input type="text" id="searchKeyword" placeholder="장소 검색 (예: 송남초)" onkeypress="if(event.keyCode==13) searchPlace();">
+      <div id="map"></div>
+      <input type="text" id="stopName" placeholder="정류장 명칭">
+      <input type="text" id="stopLat" readonly placeholder="위도 (지도 클릭)">
+      <input type="text" id="stopLng" readonly placeholder="경도 (지도 클릭)">
+      <button class="btn-main" onclick="addStopToList()">목록에 임시 추가</button>
+    </div>
+
+    <div class="card">
+      <h2>📋 노선 순서 편집</h2>
+      <div id="stopListArea" style="min-height: 400px;">로딩 중...</div>
+      <button class="btn-main btn-save" onclick="saveToFirebase()">✅ 현재 순서로 서버 저장</button>
+    </div>
+  </div>
+
+  <script>
+    // ★ [핵심] 여기에 복사하신 설정값을 넣으세요 ★
+    const firebaseConfig = {
+      apiKey: "AIzaSyBgvf-DLS7yHRaQQo_VBuD8Iq0OFpJNbFY",
+      authDomain: "schoolbus-d084b.firebaseapp.com",
+      databaseURL: "https://schoolbus-d084b-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "schoolbus-d084b",
+      storageBucket: "schoolbus-d084b.firebasestorage.app",
+      messagingSenderId: "827567571467",
+      appId: "1:827567571467:web:b3ee5370e972bc05f1bd0e"
+    };
+
+    // 파이어베이스 초기화
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let map, clickMarker, ps, currentStops = [], currentRoute = "1호차";
+
+    function initMap() {
+      const container = document.getElementById('map');
+      map = new kakao.maps.Map(container, { center: new kakao.maps.LatLng(36.82, 127.10), level: 4 });
+      ps = new kakao.maps.services.Places();
+      
+      clickMarker = new kakao.maps.Marker({ position: map.getCenter(), draggable: true });
+      clickMarker.setMap(map);
+
+      kakao.maps.event.addListener(map, 'click', (e) => updateInput(e.latLng));
+      kakao.maps.event.addListener(clickMarker, 'dragend', () => updateInput(clickMarker.getPosition()));
+
+      changeRoute(); // 초기 데이터 로드
+    }
+
+    function updateInput(latlng) {
+      clickMarker.setPosition(latlng);
+      document.getElementById('stopLat').value = latlng.getLat();
+      document.getElementById('stopLng').value = latlng.getLng();
+    }
+
+    function searchPlace() {
+      const kw = document.getElementById('searchKeyword').value;
+      ps.keywordSearch(kw, (data, status) => {
+        if (status === kakao.maps.services.Status.OK) {
+          const loc = new kakao.maps.LatLng(data[0].y, data[0].x);
+          map.setCenter(loc);
+          updateInput(loc);
+          document.getElementById('stopName').value = data[0].place_name;
+        }
+      });
+    }
+
+    // 노선 변경 및 데이터 불러오기
+    function changeRoute() {
+      currentRoute = document.getElementById('routeSelect').value;
+      db.ref('stops/' + currentRoute).once('value', (snap) => {
+        currentStops = snap.val() || [];
+        renderList();
+      });
+    }
+
+    function renderList() {
+      const area = document.getElementById('stopListArea');
+      area.innerHTML = '';
+      currentStops.forEach((stop, i) => {
+        const item = document.createElement('div');
+        item.className = 'stop-item';
+        item.innerHTML = `
+          <div class="order-btns">
+            <button class="order-btn" onclick="move(${i}, -1)">▲</button>
+            <button class="order-btn" onclick="move(${i}, 1)">▼</button>
+          </div>
+          <div class="stop-info">
+            <b>${i+1}. ${stop.name}</b><br>
+            <span style="font-size:11px; color:#888;">${Number(stop.lat).toFixed(4)}, ${Number(stop.lng).toFixed(4)}</span>
+          </div>
+          <button class="del-btn" onclick="remove(${i})">삭제</button>
+        `;
+        area.appendChild(item);
+      });
+    }
+
+    function addStopToList() {
+      const name = document.getElementById('stopName').value;
+      const lat = document.getElementById('stopLat').value;
+      const lng = document.getElementById('stopLng').value;
+      if(!name || !lat) return alert("정보를 입력하세요.");
+      currentStops.push({ name, lat: Number(lat), lng: Number(lng) });
+      renderList();
+    }
+
+    function move(idx, dir) {
+      const target = idx + dir;
+      if (target < 0 || target >= currentStops.length) return;
+      [currentStops[idx], currentStops[target]] = [currentStops[target], currentStops[idx]];
+      renderList();
+    }
+
+    function remove(idx) {
+      if(confirm("삭제하시겠습니까?")) {
+        currentStops.splice(idx, 1);
+        renderList();
+      }
+    }
+
+    // ★ [핵심] 파이어베이스 저장 ★
+    function saveToFirebase() {
+      if(!confirm(currentRoute + " 노선을 저장하시겠습니까?")) return;
+      db.ref('stops/' + currentRoute).set(currentStops)
+        .then(() => alert("서버 저장 완료!"))
+        .catch(err => alert("에러 발생: " + err));
+    }
+
+    window.onload = initMap;
+  </script>
+</body>
+</html>
