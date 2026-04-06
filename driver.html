@@ -30,7 +30,7 @@
   </div>
 
   <script>
-    // ★ [1] 파이어베이스 설정값 입력 (콘솔에서 복사한 내용으로 교체) ★
+    // ★ [1] 파이어베이스 설정값 입력 ★
     const firebaseConfig = {
       apiKey: "AIzaSyBgvf-DLS7yHRaQQo_VBuD8Iq0OFpJNbFY",
       authDomain: "schoolbus-d084b.firebaseapp.com",
@@ -56,20 +56,24 @@
     function toggleTracking() {
       const btn = document.getElementById('startBtn');
       const status = document.getElementById('status');
+      
       if (!watchId) {
         watchId = navigator.geolocation.watchPosition(p => {
           const updates = { lat: p.coords.latitude, lng: p.coords.longitude, lastUpdate: Date.now() };
           db.ref('buses/' + selectedRoute).set(updates);
-          status.innerHTML = `<span style="color:#4CAF50">● ${selectedRoute} 전송 중</span><br><small>${updates.lat.toFixed(4)}, ${updates.lng.toFixed(4)}</small>`;
+          status.innerHTML = `<span style="color:#4CAF50">● ${selectedRoute} 전송 중</span>`;
         }, err => alert("GPS를 켜주세요."), { enableHighAccuracy: true });
         btn.innerText = "운행 종료";
         btn.classList.add('stop');
       } else {
+        // 운행 종료 시 데이터 삭제 로직 포함
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
-        btn.innerText = "위치 전송 시작";
-        btn.classList.remove('stop');
-        status.innerText = "운행 종료됨";
+        db.ref('buses/' + selectedRoute).remove().then(() => {
+          btn.innerText = "위치 전송 시작";
+          btn.classList.remove('stop');
+          status.innerText = "운행 종료됨 (서버 연결 해제)";
+        });
       }
     }
   </script>
