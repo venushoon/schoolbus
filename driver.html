@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>스쿨버스 운행 패널</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 50px; }
+    button { padding: 20px 40px; font-size: 20px; font-weight: bold; background: #4CAF50; color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
+    #status { margin-top: 30px; font-size: 16px; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>운전 시작 패널</h1>
+  <button id="toggleBtn" onclick="toggleTracking()">위치 전송 시작</button>
+  <div id="status">현재 대기 중입니다.</div>
+
+  <script>
+    // ★ 방금 복사해둔 구글 앱스크립트 웹앱 URL을 여기에 붙여넣으세요 ★
+    const GAS_URL = "YOUR_GAS_WEB_APP_URL";
+    
+    const busId = "bus_01"; 
+    let watchId = null;
+
+    function toggleTracking() {
+      const btn = document.getElementById('toggleBtn');
+      const status = document.getElementById('status');
+
+      if (!watchId) {
+        if ("geolocation" in navigator) {
+          watchId = navigator.geolocation.watchPosition(
+            (pos) => {
+              const lat = pos.coords.latitude;
+              const lng = pos.coords.longitude;
+              
+              // fetch를 사용해 구글 스크립트로 위치 전송
+              const url = `${GAS_URL}?action=updateBusLocation&busId=${busId}&lat=${lat}&lng=${lng}`;
+              
+              fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                  if(data.status === "Update Success") {
+                     status.innerHTML = `<span style="color:blue;">전송 중...</span><br>(위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)})`;
+                  }
+                })
+                .catch(err => console.error("전송 에러:", err));
+            },
+            (err) => alert("GPS를 켜주세요: " + err.message),
+            { enableHighAccuracy: true, maximumAge: 3000 }
+          );
+          
+          btn.innerText = "운전 종료";
+          btn.style.background = "#E53935";
+        } else {
+          alert("이 브라우저에서는 GPS를 지원하지 않습니다.");
+        }
+      } else {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        btn.innerText = "위치 전송 시작";
+        btn.style.background = "#4CAF50";
+        status.innerText = "운행이 종료되었습니다.";
+      }
+    }
+  </script>
+</body>
+</html>
