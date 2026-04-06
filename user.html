@@ -3,57 +3,67 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>송남초 실시간 스쿨버스</title>
+  <title>송남초 스쿨버스 실시간</title>
+  
   <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-database-compat.js"></script>
+  
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=26741f440bd5957a0910a000675e4ca3"></script>
+  
   <style>
-    /* 기존 스타일 유지 및 버스 행 스타일 추가 */
     body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; background: #f5f5f5; }
-    .route-tabs { display: flex; background: white; padding: 10px; gap: 10px; position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    .tab-btn { flex: 1; padding: 12px; border: 2px solid #eee; background: white; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    .route-tabs { display: flex; background: white; padding: 10px 15px; gap: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 20; }
+    .tab-btn { flex: 1; padding: 12px; border: 2px solid #eee; background: white; border-radius: 8px; font-weight: bold; font-size: 15px; color: #555; cursor: pointer; }
     .tab-btn.active { border-color: #4CAF50; background: #e8f5e9; color: #2e7d32; }
-    .map-container { position: sticky; top: 58px; z-index: 5; width: 100%; height: 40vh; }
+    .map-container { position: sticky; top: 60px; z-index: 5; width: 100%; height: 50vh; }
     #map { width: 100%; height: 100%; }
-    .btn-find-bus { position: absolute; bottom: 20px; right: 20px; z-index: 10; background: #FF9800; color: white; border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 24px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
-    
-    .content-area { padding: 15px; }
-    .stop-item { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; display: flex; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); transition: 0.2s; }
+    .btn-find-bus { position: absolute; bottom: 20px; right: 20px; z-index: 10; background: #FF9800; color: white; border: none; border-radius: 50%; width: 55px; height: 55px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); cursor: pointer; font-size: 24px; display: flex; align-items: center; justify-content: center; }
+    .content-area { padding: 15px; padding-bottom: 30px; }
+    .info-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    .status-badge { background: #888; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; transition: 0.3s; }
+    .stop-list { display: flex; flex-direction: column; gap: 10px; }
+    .stop-item { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; display: flex; align-items: center; }
     .stop-item.active { border: 2px solid #2196F3; background: #e3f2fd; }
     .stop-index { width: 24px; height: 24px; background: #eee; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 15px; color: #666; }
-    .stop-name { font-weight: bold; flex-grow: 1; }
+    .stop-info { flex-grow: 1; }
+    .stop-name { font-weight: bold; font-size: 16px; color: #333; }
     .eta-box { text-align: right; }
-    .eta-time { font-size: 16px; font-weight: bold; color: #E53935; }
-    
-    /* ★ 목록 사이 버스 표시 스타일 ★ */
+    .eta-time { font-size: 18px; font-weight: bold; color: #E53935; }
+    .eta-dist { font-size: 11px; color: #666; }
+    .update-tag { position: absolute; top: 10px; right: 10px; z-index: 10; background: rgba(255,255,255,0.9); padding: 5px 10px; border-radius: 5px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+
+    /* ★ 추가: 목록 사이 버스 안내 행 스타일 ★ */
     .bus-position-row {
       display: flex; align-items: center; justify-content: center;
-      background: #fff9c4; padding: 8px; border-radius: 10px;
-      margin: -5px 15px 10px 15px; border: 1px dashed #fbc02d;
+      background: #fff9c4; padding: 10px; border-radius: 10px;
+      margin: -5px 10px 5px 10px; border: 1px dashed #fbc02d;
       animation: pulse 2s infinite;
     }
-    @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; } 100% { opacity: 0.8; } }
-    .bus-emoji { font-size: 20px; margin-right: 8px; }
+    @keyframes pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
+    .bus-emoji { font-size: 20px; margin-right: 10px; }
     .bus-text { font-size: 13px; font-weight: bold; color: #f57f17; }
   </style>
 </head>
 <body>
-
   <div class="route-tabs">
     <button class="tab-btn active" id="tab-1" onclick="changeRoute('1호차', 'tab-1')">🚌 1호차</button>
     <button class="tab-btn" id="tab-2" onclick="changeRoute('2호차', 'tab-2')">🚌 2호차</button>
   </div>
-
   <div class="map-container">
+    <div id="update-tag" class="update-tag">대기 중...</div>
     <div id="map"></div>
     <button class="btn-find-bus" onclick="focusOnBus()">🚌</button>
   </div>
-
   <div class="content-area">
+    <div class="info-header">
+      <h2 style="margin:0; font-size: 20px;" id="list-title">1호차 노선 목록</h2>
+      <div class="status-badge" id="bus-status">운행 종료</div>
+    </div>
     <div id="stop-list" class="stop-list"></div>
   </div>
 
   <script>
+    // ★ [2] 파이어베이스 설정값 입력 ★
     const firebaseConfig = {
       apiKey: "AIzaSyBgvf-DLS7yHRaQQo_VBuD8Iq0OFpJNbFY",
       authDomain: "schoolbus-d084b.firebaseapp.com",
@@ -66,7 +76,7 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    let map, busMarker, currentBusPos, stopMarkers = [], currentRoute = "1호차", stopsData = [];
+    let map, busMarker = null, stopMarkers = [], currentRoute = "1호차", currentBusPos = null, selectedStopIndex = -1, stopsData = [];
 
     function initMap() {
       map = new kakao.maps.Map(document.getElementById('map'), { center: new kakao.maps.LatLng(36.82, 127.10), level: 5 });
@@ -74,102 +84,132 @@
     }
 
     function changeRoute(route, id) {
+      if (currentRoute === route) return;
       currentRoute = route;
+      document.getElementById('list-title').innerText = route + " 노선 목록";
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.getElementById(id).classList.add('active');
-      if(busMarker) busMarker.setMap(null); busMarker = null;
+      if (busMarker) { busMarker.setMap(null); busMarker = null; }
       stopMarkers.forEach(m => m.setMap(null)); stopMarkers = [];
+      selectedStopIndex = -1; // 노선 변경 시 선택 초기화
       listenData();
     }
 
     function listenData() {
-      // 버스 위치 실시간 수신
-      db.ref('buses/' + currentRoute).on('value', snap => {
+      // 버스 위치 데이터 감시
+      db.ref('buses/' + currentRoute).on('value', (snap) => {
         const data = snap.val();
-        if(data) {
+        const badge = document.getElementById('bus-status');
+        const tag = document.getElementById('update-tag');
+        
+        if (data) {
           currentBusPos = new kakao.maps.LatLng(data.lat, data.lng);
-          if(!busMarker) busMarker = new kakao.maps.Marker({ map: map, position: currentBusPos });
+          if (!busMarker) busMarker = new kakao.maps.Marker({ position: currentBusPos, map: map });
           else busMarker.setPosition(currentBusPos);
-          // 버스가 움직일 때마다 목록 새로고침 (아이콘 위치 변경을 위해)
-          renderStopList(); 
+          
+          badge.innerText = "운행 중"; badge.style.background = "#4CAF50";
+          tag.innerText = "최근 갱신: " + new Date(data.lastUpdate).toLocaleTimeString();
+          
+          // 버스가 움직일 때마다 목록 리프레시 (버스 아이콘 위치 업데이트)
+          renderStops(stopsData);
         } else {
-          if(busMarker) { busMarker.setMap(null); busMarker = null; }
+          if (busMarker) { busMarker.setMap(null); busMarker = null; }
           currentBusPos = null;
-          renderStopList();
+          badge.innerText = "운행 종료"; badge.style.background = "#888";
+          tag.innerText = "현재 운행하지 않음";
+          renderStops(stopsData); // 버스 아이콘 제거를 위해 리프레시
         }
       });
 
-      // 정류장 목록 수신
-      db.ref('stops/' + currentRoute).on('value', snap => {
+      // 정류장 목록 감시
+      db.ref('stops/' + currentRoute).on('value', (snap) => {
         stopsData = snap.val() || [];
-        renderStopList();
+        renderStops(stopsData);
       });
     }
 
-    function renderStopList() {
-      const listContainer = document.getElementById('stop-list');
-      listContainer.innerHTML = '';
+    function renderStops(stops) {
+      const list = document.getElementById('stop-list');
+      list.innerHTML = '';
       
-      // 지도 마커 초기화 (목록 재생성 시)
-      stopMarkers.forEach(m => m.setMap(null)); stopMarkers = [];
+      // 기존 마커 초기화 (목록을 다시 그릴 때 마커가 중복 생성되지 않도록 함)
+      stopMarkers.forEach(m => m.setMap(null));
+      stopMarkers = [];
 
+      // 버스와 가장 가까운 정류장 인덱스 찾기
       let nearestIdx = -1;
-      let minSectionDist = Infinity;
-
-      // 1. 버스가 어느 구간에 있는지 계산 (직선거리 기준 가장 가까운 정류장 이후로 판별)
-      if (currentBusPos && stopsData.length > 0) {
+      if (currentBusPos && stops.length > 0) {
         let minDist = Infinity;
-        stopsData.forEach((s, i) => {
-          const dist = getDist(currentBusPos.getLat(), currentBusPos.getLng(), s.lat, s.lng);
-          if(dist < minDist) { minDist = dist; nearestIdx = i; }
+        stops.forEach((s, i) => {
+          const d = getDistance(currentBusPos.getLat(), currentBusPos.getLng(), s.lat, s.lng);
+          if (d < minDist) { minDist = d; nearestIdx = i; }
         });
       }
 
-      // 2. 목록 그리기
-      stopsData.forEach((stop, i) => {
-        // 정류장 마커 표시
-        const pos = new kakao.maps.LatLng(stop.lat, stop.lng);
-        const marker = new kakao.maps.Marker({ position: pos, map: map, opacity: 0.4 });
-        stopMarkers.push(marker);
+      stops.forEach((s, i) => {
+        const pos = new kakao.maps.LatLng(s.lat, s.lng);
+        
+        // 지도 마커 추가
+        const m = new kakao.maps.Marker({ position: pos, map: map, opacity: 0.6 });
+        stopMarkers.push(m);
 
-        // 정류장 카드 생성
+        // HTML 리스트 아이템 생성
         const item = document.createElement('div');
         item.className = 'stop-item';
+        if (selectedStopIndex === i) item.classList.add('active');
+        
         item.innerHTML = `
           <div class="stop-index">${i+1}</div>
-          <div class="stop-name">${stop.name}</div>
-          <div class="eta-box" id="eta-${i}">${calcETA(stop)}</div>
+          <div class="stop-info">
+            <div class="stop-name">${s.name}</div>
+          </div>
+          <div class="eta-box" id="eta-${i}">${calcETA(s, i)}</div>
         `;
-        item.onclick = () => { map.panTo(pos); };
-        listContainer.appendChild(item);
+        
+        item.onclick = () => {
+          map.panTo(pos);
+          selectedStopIndex = i;
+          renderStops(stops); // 선택 상태 반영을 위해 재렌더링
+        };
+        
+        list.appendChild(item);
 
-        // ★ 버스 아이콘 삽입 로직 ★
-        // 가장 가까운 정류장이 i번이고, 아직 다음 정류장에 도착 안 했다면 그 아래에 버스 표시
+        // ★ 핵심: 버스 위치 이모지 삽입 (가장 가까운 정류장 아래에 표시) ★
         if (i === nearestIdx && currentBusPos) {
-           const busRow = document.createElement('div');
-           busRow.className = 'bus-position-row';
-           busRow.innerHTML = `<span class="bus-emoji">🚌</span><span class="bus-text">버스가 이 근처를 운행 중입니다</span>`;
-           listContainer.appendChild(busRow);
+          const busRow = document.createElement('div');
+          busRow.className = 'bus-position-row';
+          busRow.innerHTML = `<span class="bus-emoji">🚌</span><span class="bus-text">버스가 이 근처를 운행 중입니다</span>`;
+          list.appendChild(busRow);
         }
       });
     }
 
-    function getDist(lat1, lon1, lat2, lon2) {
-      const p = 0.017453292519943295;
-      const c = Math.cos;
-      const a = 0.5 - c((lat2 - lat1) * p)/2 + c(lat1 * p) * c(lat2 * p) * (1 - c((lon2 - lon1) * p))/2;
-      return 12742 * Math.asin(Math.sqrt(a)); // km 반환
+    // 거리 계산 함수 (단위: km)
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371; // 지구 반지름
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
-    function calcETA(stop) {
-      if(!currentBusPos) return "";
-      const poly = new kakao.maps.Polyline({ path: [currentBusPos, new kakao.maps.LatLng(stop.lat, stop.lng)] });
-      const d = poly.getLength();
-      if(d < 150) return "<span class='eta-time'>도착</span>";
-      return `<span class='eta-time'>약 ${Math.round((d*1.3)/333)}분</span>`;
+    // 개별 정류장 ETA 계산
+    function calcETA(target, index) {
+      if (!currentBusPos) return "";
+      const dist = Math.round(new kakao.maps.Polyline({ path: [currentBusPos, new kakao.maps.LatLng(target.lat, target.lng)] }).getLength());
+      const minutes = Math.round((dist * 1.3) / 333);
+      
+      // 선택된 정류장이거나 거리가 아주 가까우면 표시
+      if (selectedStopIndex === index || dist < 2000) {
+        let timeText = (dist < 100) ? "도착예정" : `약 ${minutes}분`;
+        return `<div class="eta-time">${timeText}</div><div class="eta-dist">잔여 ${dist}m</div>`;
+      }
+      return "";
     }
 
-    function focusOnBus() { if(currentBusPos) map.panTo(currentBusPos); }
+    function focusOnBus() { if (currentBusPos) map.panTo(currentBusPos); else alert("운행 대기 중입니다."); }
     window.onload = initMap;
   </script>
 </body>
