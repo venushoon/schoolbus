@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>스쿨버스 관리자 페이지</title>
+  <style>
+    body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+    .container { max-width: 800px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 600px) { .container { grid-template-columns: 1fr; } }
+    
+    .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    h2 { margin-top: 0; font-size: 18px; color: #333; }
+    
+    #map { width: 100%; height: 300px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #ddd; }
+    
+    input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+    input[readonly] { background: #eee; color: #666; }
+    button { width: 100%; padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+    button:hover { background: #45a049; }
+    
+    .stop-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+    .delete-btn { width: auto; padding: 5px 10px; background: #E53935; font-size: 12px; }
+    .delete-btn:hover { background: #c62828; }
+  </style>
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=26741f440bd5957a0910a000675e4ca3"></script>
+</head>
+<body>
+
+  <h1 style="text-align: center;">🚌 스쿨버스 노선 관리</h1>
+
+  <div class="container">
+    <div class="card">
+      <h2>1. 새 정류장 추가</h2>
+      <p style="font-size: 13px; color: #666;">지도를 클릭하면 위도/경도가 자동 입력됩니다.</p>
+      <div id="map"></div>
+      
+      <input type="text" id="stopName" placeholder="예: 송남초등학교 정문">
+      <input type="text" id="stopLat" placeholder="위도 (지도 클릭 시 자동 입력)" readonly>
+      <input type="text" id="stopLng" placeholder="경도 (지도 클릭 시 자동 입력)" readonly>
+      <button onclick="addStop()">노선에 추가하기</button>
+    </div>
+
+    <div class="card">
+      <h2>2. 현재 등록된 노선</h2>
+      <button onclick="loadStops()" style="background: #2196F3; margin-bottom: 15px;">새로고침</button>
+      <div id="stopList">로딩 중...</div>
+    </div>
+  </div>
+
+  <script>
+    const GAS_URL = "https://script.google.com/macros/s/AKfycby6a3TgtSuqCdMxJZvVpZ6cSlpa-lUSoyk7xpiRLbzC6dAW_S3oAGDYqubM8DExRxyy/exec";
+    let map, clickMarker;
+
+    // 1. 지도 초기화
+    function initMap() {
+      const mapContainer = document.getElementById('map');
+      // 천안 송남초 부근으로 초기 중심 설정
+      const mapOption = { center: new kakao.maps.LatLng(36.82, 127.10), level: 4 };
+      map = new kakao.maps.Map(mapContainer, mapOption);
+
+      // 지도 클릭 이벤트: 클릭한 곳에 마커를 찍고 입력창에 좌표 입력
+      kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
+        const latlng = mouseEvent.latLng;
+        
+        if (!clickMarker) {
+          clickMarker = new kakao.maps.Marker({ position: latlng, map: map });
+        } else {
+          clickMarker.setPosition(latlng);
+        }
+        
+        document.getElementById('stopLat').value = latlng.getLat();
+        document.getElementById('stopLng').value = latlng.getLng();
+      });
+
+      loadStops(); // 페이지 로드 시 목록 불러오기
+    }
+
+    // 2. 정류장 목록 불러오기 (GET)
+    function loadStops() {
+      document.getElementById('stopList').innerHTML = "로딩 중...";
+      fetch(GAS_URL + "?action=getBusData")
+        .then(res => res.json())
+        .then(data => {
+          const listDiv = document.getElementById('stopList');
+          listDiv.innerHTML = '';
+          
+          if(data.stops.length === 0) {
+            listDiv.innerHTML = "<p style='color:#999; text-align:center;'>등록된 정류장이 없습니다.</p>";
+            return;
+          }
+
+          data.stops.forEach(stop => {
+            listDiv.innerHTML += `
+              <div class="stop-item">
+                <div>
+                  <strong>${stop.name}</strong><br>
+                  <span style="font-size: 11px; color: #888;">${stop.lat.toFixed(4)}, ${stop.lng.toFixed(4)}</span>
+                </div>
+                <button class="delete-btn" onclick="deleteStop('${stop.name}')">삭제</button>
+              </div>
+            `;
+          });
+        });
+    }
+
+    // 3. 정류장 추가하기 (POST 역할)
+    function addStop() {
+      const name = document.getElementById('stopName').value;
+      const lat = document.getElementById('stopLat').value;
+      const lng = document.getElementById('stopLng').value;
+
+      if (!name || !lat || !lng) {
+        alert("정류장 이름과 위치(지도 클릭)를 모두 입력해주세요.");
+        return;
+      }
+
+      const btn = event.target;
+      btn.innerText = "추가 중...";
+      
+      const url = `${GAS_URL}?action=addStop&name=${encodeURIComponent(name)}&lat=${lat}&lng=${lng}`;
+      
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          if(data.status === "Success") {
+            alert("성공적으로 추가되었습니다.");
+            document.getElementById('stopName').value = ''; // 입력창 초기화
+            loadStops(); // 목록 새로고침
+          }
+          btn.innerText = "노선에 추가하기";
+        });
+    }
+
+    // 4. 정류장 삭제하기
+    function deleteStop(name) {
+      if(!confirm(`'${name}' 정류장을 정말 삭제하시겠습니까?`)) return;
+
+      const url = `${GAS_URL}?action=deleteStop&name=${encodeURIComponent(name)}`;
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          if(data.status === "Success") {
+            loadStops(); // 목록 새로고침
+          }
+        });
+    }
+
+    window.onload = initMap;
+  </script>
+</body>
+</html>
