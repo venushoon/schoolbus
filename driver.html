@@ -2,64 +2,48 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>스쿨버스 운행 패널</title>
-  <style>
-    body { font-family: sans-serif; text-align: center; padding: 50px; }
-    button { padding: 20px 40px; font-size: 20px; font-weight: bold; background: #4CAF50; color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
-    #status { margin-top: 30px; font-size: 16px; color: #555; }
-  </style>
+  <title>기사용 - 실시간 전송</title>
+  <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-database-compat.js"></script>
 </head>
 <body>
-  <h1>운전 시작 패널</h1>
-  <button id="toggleBtn" onclick="toggleTracking()">위치 전송 시작</button>
-  <div id="status">현재 대기 중입니다.</div>
+  <h2>1호차 운행 시작</h2>
+  <button id="startBtn" onclick="toggleTracking()" style="padding:20px; font-size:20px;">위치 전송 시작</button>
+  <div id="status">대기 중...</div>
 
   <script>
-    // ★ 방금 복사해둔 구글 앱스크립트 웹앱 URL을 여기에 붙여넣으세요 ★
-    const GAS_URL = "https://script.google.com/macros/s/AKfycby6a3TgtSuqCdMxJZvVpZ6cSlpa-lUSoyk7xpiRLbzC6dAW_S3oAGDYqubM8DExRxyy/exec";
-    
-    const busId = "bus_01"; 
+    // 파이어베이스 설정 (선생님의 정보로 교체하세요)
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      databaseURL: "https://YOUR_PROJECT_ID.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID",
+      appId: "YOUR_APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
     let watchId = null;
+    const busId = "1호차";
 
     function toggleTracking() {
-      const btn = document.getElementById('toggleBtn');
-      const status = document.getElementById('status');
-
+      const btn = document.getElementById('startBtn');
       if (!watchId) {
-        if ("geolocation" in navigator) {
-          watchId = navigator.geolocation.watchPosition(
-            (pos) => {
-              const lat = pos.coords.latitude;
-              const lng = pos.coords.longitude;
-              
-              // fetch를 사용해 구글 스크립트로 위치 전송
-              const url = `${GAS_URL}?action=updateBusLocation&busId=${busId}&lat=${lat}&lng=${lng}`;
-              
-              fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                  if(data.status === "Update Success") {
-                     status.innerHTML = `<span style="color:blue;">전송 중...</span><br>(위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)})`;
-                  }
-                })
-                .catch(err => console.error("전송 에러:", err));
-            },
-            (err) => alert("GPS를 켜주세요: " + err.message),
-            { enableHighAccuracy: true, maximumAge: 3000 }
-          );
-          
-          btn.innerText = "운전 종료";
-          btn.style.background = "#E53935";
-        } else {
-          alert("이 브라우저에서는 GPS를 지원하지 않습니다.");
-        }
+        watchId = navigator.geolocation.watchPosition((pos) => {
+          const updates = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            lastUpdate: new Date().getTime()
+          };
+          // 파이어베이스에 실시간 덮어쓰기
+          database.ref('buses/' + busId).set(updates);
+          document.getElementById('status').innerText = `전송 중... (${updates.lat.toFixed(4)})`;
+        }, (err) => alert(err.message), { enableHighAccuracy: true });
+        btn.innerText = "운행 종료";
       } else {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
         btn.innerText = "위치 전송 시작";
-        btn.style.background = "#4CAF50";
-        status.innerText = "운행이 종료되었습니다.";
+        document.getElementById('status').innerText = "운행 종료됨";
       }
     }
   </script>
