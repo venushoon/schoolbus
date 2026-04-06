@@ -3,234 +3,163 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>스쿨버스 관리자 페이지</title>
+  <title>송남초 스쿨버스 관리자</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-    .container { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    @media (max-width: 768px) { .container { grid-template-columns: 1fr; } }
+    body { font-family: sans-serif; background: #f4f7f6; margin: 0; padding: 20px; }
+    .container { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 800px) { .container { grid-template-columns: 1fr; } }
     
-    .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-    h2 { margin-top: 0; font-size: 18px; color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 15px;}
+    .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+    h2 { margin-top: 0; color: #2c3e50; border-left: 5px solid #4CAF50; padding-left: 10px; }
     
-    /* 검색창 스타일 */
-    .search-box { display: flex; gap: 8px; margin-bottom: 10px; }
-    .search-box input { margin-bottom: 0; flex-grow: 1; }
-    .btn-search { width: 80px; margin-bottom: 0; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;}
-    .btn-search:hover { background: #555; }
+    #map { width: 100%; height: 350px; border-radius: 8px; margin: 10px 0; border: 1px solid #ddd; }
+    input { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+    input[readonly] { background: #f9f9f9; }
     
-    #map { width: 100%; height: 350px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #ccc; }
-    .guide-text { font-size: 12px; color: #1976D2; margin-top: -5px; margin-bottom: 15px; font-weight: bold; text-align: center;}
+    .btn-main { background: #4CAF50; color: white; border: none; padding: 15px; border-radius: 6px; width: 100%; font-weight: bold; cursor: pointer; }
+    .btn-save { background: #FF9800; margin-top: 10px; }
+
+    .stop-item { 
+      display: flex; align-items: center; padding: 12px; background: #fff; 
+      border: 1px solid #eee; border-radius: 8px; margin-bottom: 8px;
+    }
+    .stop-info { flex-grow: 1; margin: 0 10px; }
+    .stop-name { font-weight: bold; display: block; }
+    .stop-coords { font-size: 11px; color: #888; }
     
-    /* 입력 폼 스타일 */
-    .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
-    .input-group input { flex: 1; }
-    input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 14px;}
-    input[readonly] { background: #f9f9f9; color: #777; border-color: #ddd;}
-    
-    button { width: 100%; padding: 14px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 15px; transition: 0.2s;}
-    button:hover { background: #45a049; }
-    .btn-refresh { background: #2196F3; margin-bottom: 15px; padding: 10px;}
-    .btn-refresh:hover { background: #1976D2; }
-    
-    /* 노선 목록 스타일 */
-    .stop-list { max-height: 500px; overflow-y: auto; }
-    .stop-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; transition: background 0.2s; }
-    .stop-item:hover { background: #f9f9f9; }
-    .stop-item-info strong { font-size: 15px; color: #222; }
-    .stop-item-info span { font-size: 12px; color: #888; display: block; margin-top: 3px;}
-    .delete-btn { width: auto; padding: 6px 12px; background: #FFEbee; color: #d32f2f; border: 1px solid #ffcdd2; font-size: 12px; border-radius: 4px;}
-    .delete-btn:hover { background: #ffcdd2; color: #b71c1c; }
+    .order-btns { display: flex; flex-direction: column; gap: 2px; }
+    .order-btn { padding: 4px 8px; font-size: 12px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; }
+    .del-btn { background: #ffeded; color: #d32f2f; border: 1px solid #ffcdd2; margin-left: 10px; padding: 8px; cursor: pointer; border-radius: 4px; }
   </style>
-  
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=26741f440bd5957a0910a000675e4ca3&libraries=services"></script>
 </head>
 <body>
 
-  <h1 style="text-align: center; color: #2c3e50; margin-bottom: 30px;">🚌 스쿨버스 노선 관리자</h1>
+  <h1 style="text-align:center;">🚌 노선 마스터 관리</h1>
 
   <div class="container">
     <div class="card">
-      <h2>📍 정류장 찾기 및 등록</h2>
-      
-      <div class="search-box">
-        <input type="text" id="searchKeyword" placeholder="장소 검색 (예: 송남초)" onkeypress="if(event.keyCode==13) searchPlace();">
-        <button class="btn-search" onclick="searchPlace()">검색</button>
-      </div>
-
+      <h2>📍 정류장 등록/수정</h2>
+      <input type="text" id="searchKeyword" placeholder="장소 검색..." onkeypress="if(event.keyCode==13) searchPlace();">
       <div id="map"></div>
-      <div class="guide-text">☝️ 검색 결과가 없으면 지도를 클릭하거나 마커를 드래그하세요.</div>
-      
-      <input type="text" id="stopName" placeholder="정류장 이름 (직접 입력 또는 검색 시 자동 입력)">
-      <div class="input-group">
-        <input type="text" id="stopLat" placeholder="위도" readonly>
-        <input type="text" id="stopLng" placeholder="경도" readonly>
-      </div>
-      <button onclick="addStop()" id="addBtn">노선에 추가하기</button>
+      <input type="text" id="stopName" placeholder="정류장 명칭">
+      <input type="text" id="stopLat" readonly placeholder="위도">
+      <input type="text" id="stopLng" readonly placeholder="경도">
+      <button class="btn-main" onclick="addStopToList()">목록에 임시 추가</button>
+      <p style="font-size:12px; color:#666;">* 목록에서 순서를 조정한 후 아래 '최종 순서 저장'을 꼭 눌러주세요.</p>
     </div>
 
     <div class="card">
-      <h2>📋 현재 등록된 정류장 목록</h2>
-      <button class="btn-refresh" onclick="loadStops()">🔄 목록 새로고침</button>
-      <div id="stopList" class="stop-list">데이터를 불러오는 중입니다...</div>
+      <h2>📋 노선 순서 편집</h2>
+      <div id="stopListArea">로딩 중...</div>
+      <button class="btn-main btn-save" onclick="saveAllStopsToServer()">✅ 현재 순서로 최종 저장</button>
     </div>
   </div>
 
   <script>
-    // ★ 구글 앱스크립트 웹앱 URL 입력 ★
     const GAS_URL = "https://script.google.com/macros/s/AKfycby6a3TgtSuqCdMxJZvVpZ6cSlpa-lUSoyk7xpiRLbzC6dAW_S3oAGDYqubM8DExRxyy/exec";
-    
     let map, clickMarker, ps;
+    let currentStops = []; // 현재 화면에 표시된 정류장 배열
 
-    // 1. 지도 및 마커 초기화
     function initMap() {
-      const mapContainer = document.getElementById('map');
-      // 초기 중심을 송남초 부근(천안)으로 설정
       const mapOption = { center: new kakao.maps.LatLng(36.82, 127.10), level: 4 };
-      map = new kakao.maps.Map(mapContainer, mapOption);
-
-      ps = new kakao.maps.services.Places(); // 장소 검색 객체
-
-      // [핵심] 마커를 '드래그 가능'하게 생성
-      clickMarker = new kakao.maps.Marker({
-        position: map.getCenter(),
-        draggable: true 
-      });
+      map = new kakao.maps.Map(document.getElementById('map'), mapOption);
+      ps = new kakao.maps.services.Places();
+      
+      clickMarker = new kakao.maps.Marker({ position: map.getCenter(), draggable: true });
       clickMarker.setMap(map);
 
-      // 지도 클릭 이벤트: 마커를 클릭한 곳으로 이동
-      kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
-        updateMarkerPosition(mouseEvent.latLng);
-      });
+      kakao.maps.event.addListener(map, 'click', (e) => updateTarget(e.latLng));
+      kakao.maps.event.addListener(clickMarker, 'dragend', () => updateTarget(clickMarker.getPosition()));
 
-      // 마커 드래그 종료 이벤트: 이동된 위치의 좌표 추출
-      kakao.maps.event.addListener(clickMarker, 'dragend', function() {
-        updateMarkerPosition(clickMarker.getPosition());
-      });
-
-      // 페이지 로딩 시 기존 목록 불러오기
-      loadStops(); 
+      loadStopsFromServer();
     }
 
-    // 마커 위치 및 좌표 입력창 업데이트 함수
-    function updateMarkerPosition(latlng) {
+    function updateTarget(latlng) {
       clickMarker.setPosition(latlng);
       document.getElementById('stopLat').value = latlng.getLat();
       document.getElementById('stopLng').value = latlng.getLng();
     }
 
-    // 2. 장소 검색 기능
     function searchPlace() {
-      const keyword = document.getElementById('searchKeyword').value;
-      if (!keyword.trim()) {
-        alert('검색어를 입력해주세요!');
-        return;
-      }
-
-      ps.keywordSearch(keyword, function(data, status) {
+      const kw = document.getElementById('searchKeyword').value;
+      ps.keywordSearch(kw, (data, status) => {
         if (status === kakao.maps.services.Status.OK) {
-          const lat = data[0].y;
-          const lng = data[0].x;
-          const placeName = data[0].place_name;
-
-          const newPos = new kakao.maps.LatLng(lat, lng);
-          map.setCenter(newPos);
-          updateMarkerPosition(newPos);
-          document.getElementById('stopName').value = placeName;
-          
-        } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
-          alert('검색 결과가 없습니다. 지도를 직접 클릭하여 위치를 지정해주세요.');
-        } else {
-          alert('검색 중 오류가 발생했습니다.');
+          const loc = new kakao.maps.LatLng(data[0].y, data[0].x);
+          map.setCenter(loc);
+          updateTarget(loc);
+          document.getElementById('stopName').value = data[0].place_name;
         }
       });
     }
 
-    // 3. 서버에서 노선 목록 불러오기 (GET)
-    function loadStops() {
-      const listDiv = document.getElementById('stopList');
-      listDiv.innerHTML = "<div style='text-align:center; padding: 20px; color:#888;'>로딩 중...</div>";
-      
+    // 서버에서 불러오기
+    function loadStopsFromServer() {
       fetch(GAS_URL + "?action=getBusData")
         .then(res => res.json())
         .then(data => {
-          listDiv.innerHTML = '';
-          
-          if(data.stops.length === 0) {
-            listDiv.innerHTML = "<div style='text-align:center; padding: 20px; color:#999;'>등록된 정류장이 없습니다.</div>";
-            return;
-          }
-
-          data.stops.forEach(stop => {
-            listDiv.innerHTML += `
-              <div class="stop-item">
-                <div class="stop-item-info">
-                  <strong>${stop.name}</strong>
-                  <span>📍 ${stop.lat.toFixed(5)}, ${stop.lng.toFixed(5)}</span>
-                </div>
-                <button class="delete-btn" onclick="deleteStop('${stop.name}')">삭제</button>
-              </div>
-            `;
-          });
-        })
-        .catch(err => {
-          listDiv.innerHTML = "<div style='color:red;'>데이터를 불러오는데 실패했습니다. URL을 확인해주세요.</div>";
+          currentStops = data.stops;
+          renderList();
         });
     }
 
-    // 4. 새 정류장 추가하기 (POST 역할)
-    function addStop() {
-      const name = document.getElementById('stopName').value.trim();
+    // 화면 목록 갱신
+    function renderList() {
+      const area = document.getElementById('stopListArea');
+      area.innerHTML = '';
+      currentStops.forEach((stop, i) => {
+        const item = document.createElement('div');
+        item.className = 'stop-item';
+        item.innerHTML = `
+          <div class="order-btns">
+            <button class="order-btn" onclick="move(${i}, -1)">▲</button>
+            <button class="order-btn" onclick="move(${i}, 1)">▼</button>
+          </div>
+          <div class="stop-info">
+            <span class="stop-name">${i+1}. ${stop.name}</span>
+            <span class="stop-coords">${Number(stop.lat).toFixed(4)}, ${Number(stop.lng).toFixed(4)}</span>
+          </div>
+          <button class="del-btn" onclick="remove(${i})">삭제</button>
+        `;
+        area.appendChild(item);
+      });
+    }
+
+    // 목록에 임시 추가 (아직 서버 저장 안 됨)
+    function addStopToList() {
+      const name = document.getElementById('stopName').value;
       const lat = document.getElementById('stopLat').value;
       const lng = document.getElementById('stopLng').value;
-
-      if (!name || !lat || !lng) {
-        alert("정류장 이름과 위치를 모두 지정해주세요.\n(검색을 하거나 지도를 클릭하세요)");
-        return;
-      }
-
-      const btn = document.getElementById('addBtn');
-      btn.innerText = "⏳ 추가 중...";
-      btn.style.background = "#888";
+      if(!name || !lat) return alert("정보를 입력하세요.");
       
-      const url = `${GAS_URL}?action=addStop&name=${encodeURIComponent(name)}&lat=${lat}&lng=${lng}`;
-      
-      fetch(url)
-        .then(res => res.json())
-        .then(data => {
-          if(data.status === "Success") {
-            // 입력창 초기화
-            document.getElementById('stopName').value = '';
-            document.getElementById('searchKeyword').value = '';
-            loadStops(); // 목록 갱신
-          } else {
-            alert("저장에 실패했습니다.");
-          }
-        })
-        .catch(err => alert("서버 통신 오류가 발생했습니다."))
-        .finally(() => {
-          btn.innerText = "노선에 추가하기";
-          btn.style.background = "#4CAF50";
-        });
+      currentStops.push({ name, lat: Number(lat), lng: Number(lng) });
+      renderList();
     }
 
-    // 5. 정류장 삭제하기
-    function deleteStop(name) {
-      if(!confirm(`[ ${name} ] 정류장을 목록에서 완전히 삭제하시겠습니까?`)) return;
+    // 순서 이동
+    function move(index, direction) {
+      const target = index + direction;
+      if (target < 0 || target >= currentStops.length) return;
+      const temp = currentStops[index];
+      currentStops[index] = currentStops[target];
+      currentStops[target] = temp;
+      renderList();
+    }
 
-      const listDiv = document.getElementById('stopList');
-      listDiv.innerHTML = "<div style='text-align:center; padding: 20px; color:#E53935;'>삭제 중...</div>";
+    // 삭제
+    function remove(index) {
+      currentStops.splice(index, 1);
+      renderList();
+    }
 
-      const url = `${GAS_URL}?action=deleteStop&name=${encodeURIComponent(name)}`;
-      fetch(url)
-        .then(res => res.json())
-        .then(data => {
-          if(data.status === "Success") {
-            loadStops(); 
-          } else {
-            alert("삭제에 실패했습니다.");
-            loadStops();
-          }
-        });
+    // 최종 서버 저장 (시트 덮어쓰기)
+    function saveAllStopsToServer() {
+      if(!confirm("현재 순서대로 구글 시트에 저장하시겠습니까?")) return;
+      
+      const url = `${GAS_URL}?action=saveAllStops&data=${encodeURIComponent(JSON.stringify(currentStops))}`;
+      fetch(url).then(res => res.json()).then(data => {
+        if(data.status === "Success") alert("최종 노선이 저장되었습니다!");
+      });
     }
 
     window.onload = initMap;
