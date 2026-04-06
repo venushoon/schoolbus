@@ -3,52 +3,53 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>송남초 스쿨버스 실시간</title>
-  <style>
-    body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; background: #f5f5f5; }
-    .tabs { display: flex; background: white; padding: 10px; gap: 10px; position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    .tab { flex: 1; padding: 12px; border: 2px solid #eee; border-radius: 8px; text-align: center; font-weight: bold; cursor: pointer; }
-    .tab.active { border-color: #4CAF50; background: #e8f5e9; color: #2e7d32; }
-    .map-container { position: sticky; top: 58px; z-index: 5; width: 100%; height: 45vh; }
-    #map { width: 100%; height: 100%; }
-    .btn-find { position: absolute; bottom: 20px; right: 20px; z-index: 10; background: #FF9800; color: white; border: none; border-radius: 50%; width: 55px; height: 55px; font-size: 24px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
-    .content { padding: 15px; }
-    .stop-item { background: white; padding: 15px; border-radius: 12px; margin-bottom: 10px; display: flex; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-    .stop-item.active { border: 2px solid #2196F3; background: #e3f2fd; }
-    .eta { margin-left: auto; text-align: right; font-weight: bold; color: #E53935; }
-  </style>
+  <title>송남초 스쿨버스 정보</title>
   <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-database-compat.js"></script>
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=26741f440bd5957a0910a000675e4ca3"></script>
+  <style>
+    body { margin: 0; background: #f8f9fa; font-family: -apple-system, sans-serif; }
+    .tabs { display: flex; background: #1a73e8; padding: 5px; position: sticky; top: 0; z-index: 100; }
+    .tab { flex: 1; padding: 12px; color: white; text-align: center; font-weight: bold; cursor: pointer; opacity: 0.7; }
+    .tab.active { opacity: 1; border-bottom: 3px solid white; }
+    #map { width: 100%; height: 250px; }
+    .list-header { padding: 15px; background: white; border-bottom: 1px solid #eee; font-weight: bold; color: #d32f2f; }
+    .stop-item { display: flex; align-items: center; padding: 15px; border-bottom: 1px solid #f1f1f1; background: white; cursor: pointer; }
+    .name { flex: 1; font-weight: 500; font-size: 16px; }
+    .eta-info { text-align: right; }
+    .eta-time { color: #d32f2f; font-weight: bold; font-size: 15px; display: block; }
+    .eta-dist { color: #666; font-size: 12px; }
+    .btn-focus { position: fixed; bottom: 20px; right: 20px; width: 50px; height: 50px; background: #1a73e8; color: white; border-radius: 50%; border: none; font-size: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 99; }
+  </style>
 </head>
 <body>
   <div class="tabs">
-    <div class="tab active" id="t1" onclick="changeRoute('1호차', 't1')">🚌 1호차</div>
-    <div class="tab" id="t2" onclick="changeRoute('2호차', 't2')">🚌 2호차</div>
+    <div class="tab active" id="t1" onclick="changeRoute('1호차', 't1')">1호차</div>
+    <div class="tab" id="t2" onclick="changeRoute('2호차', 't2')">2호차</div>
   </div>
-  <div class="map-container">
-    <div id="map"></div>
-    <button class="btn-find" onclick="focusBus()">🚌</button>
-  </div>
-  <div class="content" id="stopList"></div>
+  <div id="map"></div>
+  <div class="list-header" id="status-text">운행 정보 불러오는 중...</div>
+  <div id="stop-list"></div>
+  <button class="btn-focus" onclick="focusBus()">🎯</button>
 
   <script>
+    // ★ [3] 파이어베이스 설정값 입력 (위와 동일하게) ★
     const firebaseConfig = {
-  apiKey: "AIzaSyBgvf-DLS7yHRaQQo_VBuD8Iq0OFpJNbFY",
-  authDomain: "schoolbus-d084b.firebaseapp.com",
-  databaseURL: "https://schoolbus-d084b-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "schoolbus-d084b",
-  storageBucket: "schoolbus-d084b.firebasestorage.app",
-  messagingSenderId: "827567571467",
-  appId: "1:827567571467:web:b3ee5370e972bc05f1bd0e"
+      apiKey: "AIzaSyBgvf-DLS7yHRaQQo_VBuD8Iq0OFpJNbFY",
+      authDomain: "schoolbus-d084b.firebaseapp.com",
+      databaseURL: "https://schoolbus-d084b-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "schoolbus-d084b",
+      storageBucket: "schoolbus-d084b.firebasestorage.app",
+      messagingSenderId: "827567571467",
+      appId: "1:827567571467:web:b3ee5370e972bc05f1bd0e"
     };
+
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-
-    let map, busMarker, currentBusPos, stopMarkers = [], currentRoute = "1호차", selectedIdx = -1;
+    let map, busMarker, currentBusPos, stopMarkers = [], currentRoute = "1호차", stopsData = [];
 
     function initMap() {
-      map = new kakao.maps.Map(document.getElementById('map'), { center: new kakao.maps.LatLng(36.82, 127.10), level: 4 });
+      map = new kakao.maps.Map(document.getElementById('map'), { center: new kakao.maps.LatLng(36.82, 127.10), level: 5 });
       listenData();
     }
 
@@ -58,48 +59,44 @@
       document.getElementById(id).classList.add('active');
       if(busMarker) busMarker.setMap(null); busMarker = null;
       stopMarkers.forEach(m => m.setMap(null)); stopMarkers = [];
-      selectedIdx = -1;
       listenData();
     }
 
     function listenData() {
-      db.ref('buses/' + currentRoute).on('value', (snap) => {
+      db.ref('buses/' + currentRoute).on('value', snap => {
         const data = snap.val();
         if(data) {
           currentBusPos = new kakao.maps.LatLng(data.lat, data.lng);
           if(!busMarker) busMarker = new kakao.maps.Marker({ map: map, position: currentBusPos });
           else busMarker.setPosition(currentBusPos);
-          if(selectedIdx !== -1) updateETA();
-        }
+          document.getElementById('status-text').innerText = `운행 중: ${currentRoute}`;
+          updateAllETAs();
+        } else { document.getElementById('status-text').innerText = `${currentRoute} 운행 대기 중`; }
       });
-      db.ref('stops/' + currentRoute).on('value', (snap) => {
-        const stops = []; snap.forEach(child => { stops.push(child.val()); });
-        renderStops(stops);
-      });
+      db.ref('stops/' + currentRoute).on('value', snap => { stopsData = snap.val() || []; renderStops(); });
     }
 
-    function renderStops(stops) {
-      const list = document.getElementById('stopList');
+    function renderStops() {
+      const list = document.getElementById('stop-list');
       list.innerHTML = "";
-      stops.forEach((s, i) => {
+      stopMarkers.forEach(m => m.setMap(null)); stopMarkers = [];
+      stopsData.forEach((s, i) => {
         const pos = new kakao.maps.LatLng(s.lat, s.lng);
         const m = new kakao.maps.Marker({ map: map, position: pos, opacity: 0.4 });
         stopMarkers.push(m);
-        list.innerHTML += `<div class="stop-item" onclick="selectStop(${i}, ${s.lat}, ${s.lng})">
-          <b>${i+1}. ${s.name}</b><div class="eta" id="eta-${i}"></div></div>`;
+        list.innerHTML += `<div class="stop-item" onclick="map.panTo(new kakao.maps.LatLng(${s.lat}, ${s.lng}))"><span class="name">${i+1}. ${s.name}</span><div class="eta-info" id="eta-${i}">-</div></div>`;
       });
     }
 
-    function selectStop(i, lat, lng) {
-      selectedIdx = i;
-      map.panTo(new kakao.maps.LatLng(lat, lng));
-      document.querySelectorAll('.stop-item').forEach(el => el.classList.remove('active'));
-      event.currentTarget.classList.add('active');
-      updateETA();
-    }
-
-    function updateETA() {
-      // 직선거리 기반 ETA 계산 로직 (이전과 동일)
+    function updateAllETAs() {
+      if(!currentBusPos) return;
+      stopsData.forEach((s, i) => {
+        const dist = new kakao.maps.Polyline({ path: [currentBusPos, new kakao.maps.LatLng(s.lat, s.lng)] }).getLength();
+        const km = (dist / 1000).toFixed(1);
+        const minutes = Math.round((dist * 1.3) / 333);
+        const el = document.getElementById('eta-' + i);
+        if(el) { el.innerHTML = dist < 100 ? `<span class="eta-time">도착예정</span>` : `<span class="eta-time">약 ${minutes}분</span><span class="eta-dist">${km}km</span>`; }
+      });
     }
 
     function focusBus() { if(currentBusPos) map.panTo(currentBusPos); }
