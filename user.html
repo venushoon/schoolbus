@@ -4,83 +4,52 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>송남초 스쿨버스 실시간</title>
-  
   <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-database-compat.js"></script>
-  
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=26741f440bd5957a0910a000675e4ca3"></script>
-  
   <style>
-    /* 이전 디자인 CSS 완벽 복원 */
     body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; background: #f5f5f5; }
-    
-    /* 상단 노선 선택 탭 (이전 디자인) */
     .route-tabs { display: flex; background: white; padding: 10px 15px; gap: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 20; }
-    .tab-btn { flex: 1; padding: 12px; border: 2px solid #eee; background: white; border-radius: 8px; font-weight: bold; font-size: 15px; color: #555; cursor: pointer; transition: 0.2s; }
+    .tab-btn { flex: 1; padding: 12px; border: 2px solid #eee; background: white; border-radius: 8px; font-weight: bold; font-size: 15px; color: #555; cursor: pointer; }
     .tab-btn.active { border-color: #4CAF50; background: #e8f5e9; color: #2e7d32; }
-
-    /* 지도 및 플로팅 버튼 영역 */
     .map-container { position: sticky; top: 60px; z-index: 5; width: 100%; height: 50vh; }
     #map { width: 100%; height: 100%; }
-    
-    /* ★ 복원: 주황색 스쿨버스 플로팅 버튼 ★ */
-    .btn-find-bus {
-      position: absolute; bottom: 20px; right: 20px; z-index: 10;
-      background: #FF9800; color: white; border: none; border-radius: 50%;
-      width: 55px; height: 55px; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-      cursor: pointer; font-size: 24px; display: flex; align-items: center; justify-content: center;
-      transition: transform 0.2s;
-    }
-    .btn-find-bus:active { transform: scale(0.9); }
-    
-    /* 하단 정보 영역 */
+    .btn-find-bus { position: absolute; bottom: 20px; right: 20px; z-index: 10; background: #FF9800; color: white; border: none; border-radius: 50%; width: 55px; height: 55px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); cursor: pointer; font-size: 24px; display: flex; align-items: center; justify-content: center; }
     .content-area { padding: 15px; padding-bottom: 30px; }
     .info-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-    .status-badge { background: #4CAF50; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
-    
-    /* 정류장 목록 스타일 복원 */
+    .status-badge { background: #888; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; transition: 0.3s; }
     .stop-list { display: flex; flex-direction: column; gap: 10px; }
-    .stop-item { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; display: flex; align-items: center; transition: background 0.2s; }
+    .stop-item { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; display: flex; align-items: center; }
     .stop-item.active { border: 2px solid #2196F3; background: #e3f2fd; }
-    
     .stop-index { width: 24px; height: 24px; background: #eee; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 15px; color: #666; }
     .stop-info { flex-grow: 1; }
-    .stop-name { font-weight: bold; font-size: 16px; color: #333; margin-bottom: 2px; }
-    
-    /* ETA 표시 영역 복원 */
+    .stop-name { font-weight: bold; font-size: 16px; color: #333; }
     .eta-box { text-align: right; }
     .eta-time { font-size: 18px; font-weight: bold; color: #E53935; }
     .eta-dist { font-size: 11px; color: #666; }
-    
     .update-tag { position: absolute; top: 10px; right: 10px; z-index: 10; background: rgba(255,255,255,0.9); padding: 5px 10px; border-radius: 5px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
   </style>
 </head>
 <body>
-
   <div class="route-tabs">
     <button class="tab-btn active" id="tab-1" onclick="changeRoute('1호차', 'tab-1')">🚌 1호차</button>
     <button class="tab-btn" id="tab-2" onclick="changeRoute('2호차', 'tab-2')">🚌 2호차</button>
   </div>
-
   <div class="map-container">
-    <div id="update-tag" class="update-tag">업데이트 대기 중...</div>
+    <div id="update-tag" class="update-tag">대기 중...</div>
     <div id="map"></div>
-    <button class="btn-find-bus" onclick="focusOnBus()" title="버스 현위치 보기">🚌</button>
+    <button class="btn-find-bus" onclick="focusOnBus()">🚌</button>
   </div>
-
   <div class="content-area">
     <div class="info-header">
       <h2 style="margin:0; font-size: 20px;" id="list-title">1호차 노선 목록</h2>
-      <div class="status-badge" id="bus-status">상태 확인 중</div>
+      <div class="status-badge" id="bus-status">운행 종료</div>
     </div>
-    <p style="font-size:12px; color:#666; margin-top:-5px;">* 탑승할 정류장을 누르면 도착 예정 시간이 표시됩니다.</p>
-    
-    <div id="stop-list" class="stop-list">
-      </div>
+    <div id="stop-list" class="stop-list"></div>
   </div>
 
   <script>
-    // ★ [2] 파이어베이스 설정값 입력 ★
+    // ★ [3] 파이어베이스 설정값 입력 ★
     const firebaseConfig = {
       apiKey: "AIzaSyBgvf-DLS7yHRaQQo_VBuD8Iq0OFpJNbFY",
       authDomain: "schoolbus-d084b.firebaseapp.com",
@@ -91,137 +60,71 @@
       appId: "1:827567571467:web:b3ee5370e972bc05f1bd0e"
     };
 
-    // 파이어베이스 초기화 (필수 유지)
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    
     let map, busMarker = null, stopMarkers = [], currentRoute = "1호차", currentBusPos = null, selectedStopIndex = -1, stopsData = [];
 
     function initMap() {
-      const container = document.getElementById('map');
-      map = new kakao.maps.Map(container, { center: new kakao.maps.LatLng(36.82, 127.10), level: 5 });
+      map = new kakao.maps.Map(document.getElementById('map'), { center: new kakao.maps.LatLng(36.82, 127.10), level: 5 });
       listenData();
     }
 
-    // 노선 변경 기능
     function changeRoute(route, id) {
       if (currentRoute === route) return;
       currentRoute = route;
       document.getElementById('list-title').innerText = route + " 노선 목록";
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.getElementById(id).classList.add('active');
-
       if (busMarker) { busMarker.setMap(null); busMarker = null; }
       stopMarkers.forEach(m => m.setMap(null)); stopMarkers = [];
-      
-      currentBusPos = null; selectedStopIndex = -1;
-      document.getElementById('stop-list').innerHTML = "<div style='text-align:center; padding: 20px; color:#888;'>데이터 로딩 중...</div>";
-
       listenData();
     }
 
-    // Firebase 실시간 리스너 연결 (핵심 유지)
     function listenData() {
-      // 버스 실시간 위치 감시
-      db.ref('buses/' + currentRoute).on('value', (snapshot) => {
-        const data = snapshot.val();
-        const statusBadge = document.getElementById('bus-status');
-        const updateTag = document.getElementById('update-tag');
-
+      db.ref('buses/' + currentRoute).on('value', (snap) => {
+        const data = snap.val();
+        const badge = document.getElementById('bus-status');
+        const tag = document.getElementById('update-tag');
         if (data) {
           currentBusPos = new kakao.maps.LatLng(data.lat, data.lng);
-          if (!busMarker) {
-            busMarker = new kakao.maps.Marker({ position: currentBusPos, map: map, title: currentRoute });
-          } else {
-            busMarker.setPosition(currentBusPos);
-          }
-          statusBadge.innerText = "운행 중";
-          statusBadge.style.background = "#4CAF50";
-          updateTag.innerText = "최근 갱신: " + new Date(data.lastUpdate).toLocaleTimeString();
+          if (!busMarker) busMarker = new kakao.maps.Marker({ position: currentBusPos, map: map });
+          else busMarker.setPosition(currentBusPos);
+          badge.innerText = "운행 중"; badge.style.background = "#4CAF50";
+          tag.innerText = "최근 갱신: " + new Date(data.lastUpdate).toLocaleTimeString();
           if (selectedStopIndex !== -1) updateETA(stopsData[selectedStopIndex]);
         } else {
-          statusBadge.innerText = "대기 중";
-          statusBadge.style.background = "#888";
-          updateTag.innerText = "위치 정보 없음";
+          if (busMarker) { busMarker.setMap(null); busMarker = null; }
+          badge.innerText = "운행 종료"; badge.style.background = "#888";
+          tag.innerText = "현재 운행하지 않음";
+          document.querySelectorAll('.eta-box').forEach(b => b.innerHTML = '');
         }
       });
-
-      // 정류장 목록 가져오기
-      db.ref('stops/' + currentRoute).on('value', (snapshot) => {
-        stopsData = snapshot.val() || [];
-        renderStopList(stopsData);
-      });
+      db.ref('stops/' + currentRoute).on('value', (snap) => { stopsData = snap.val() || []; renderStops(stopsData); });
     }
 
-    // ★ 복원: 버스 현위치로 화면 이동 ★
-    function focusOnBus() {
-      if (currentBusPos) {
-        map.panTo(currentBusPos);
-      } else {
-        alert("해당 노선의 버스가 아직 운행을 시작하지 않았습니다.");
-      }
-    }
-
-    // 정류장 목록 렌더링 (이전 디자인 복원)
-    function renderStopList(stops) {
-      const listContainer = document.getElementById('stop-list');
-      listContainer.innerHTML = '';
-      stopMarkers.forEach(m => m.setMap(null)); stopMarkers = [];
-
-      stops.forEach((stop, index) => {
-        const pos = new kakao.maps.LatLng(stop.lat, stop.lng);
-        const marker = new kakao.maps.Marker({ position: pos, map: map, title: stop.name, opacity: 0.6 });
-        stopMarkers.push(marker);
-
+    function renderStops(stops) {
+      const list = document.getElementById('stop-list');
+      list.innerHTML = ''; stopMarkers.forEach(m => m.setMap(null)); stopMarkers = [];
+      stops.forEach((s, i) => {
+        const pos = new kakao.maps.LatLng(s.lat, s.lng);
+        stopMarkers.push(new kakao.maps.Marker({ position: pos, map: map, opacity: 0.6 }));
         const item = document.createElement('div');
         item.className = 'stop-item';
-        item.id = 'stop-' + index;
-        item.innerHTML = `
-          <div class="stop-index">${index + 1}</div>
-          <div class="stop-info">
-            <div class="stop-name">${stop.name}</div>
-          </div>
-          <div class="eta-box" id="eta-${index}"></div>
-        `;
-        
-        item.onclick = () => {
-          map.panTo(pos);
-          selectedStopIndex = index; 
-          document.querySelectorAll('.stop-item').forEach(i => i.classList.remove('active'));
-          item.classList.add('active');
-          document.querySelectorAll('.eta-box').forEach(box => box.innerHTML = '');
-          updateETA(stop);
-        };
-        listContainer.appendChild(item);
+        item.innerHTML = `<div class="stop-index">${i+1}</div><div class="stop-info"><div class="stop-name">${s.name}</div></div><div class="eta-box" id="eta-${i}"></div>`;
+        item.onclick = () => { map.panTo(pos); selectedStopIndex = i; document.querySelectorAll('.stop-item').forEach(el => el.classList.remove('active')); item.classList.add('active'); updateETA(s); };
+        list.appendChild(item);
       });
     }
 
-    // 도착 예정 시간(ETA) 계산 (기존 로직 유지)
-    function updateETA(targetStop) {
+    function updateETA(target) {
       if (!currentBusPos) return;
-      const targetPos = new kakao.maps.LatLng(targetStop.lat, targetStop.lng);
-      const line = new kakao.maps.Polyline({ path: [currentBusPos, targetPos] });
-      const distance = Math.round(line.getLength()); 
-      
-      const adjustedDistance = distance * 1.3; 
-      let estimatedMinutes = Math.round(adjustedDistance / 333);
-
-      let timeText = "";
-      if (estimatedMinutes <= 0 || distance < 100) { // 100m 이내는 도착예정
-        timeText = "도착예정";
-      } else {
-        timeText = `약 ${estimatedMinutes}분`;
-      }
-
-      const etaBox = document.getElementById('eta-' + selectedStopIndex);
-      if(etaBox) {
-        etaBox.innerHTML = `
-          <div class="eta-time">${timeText}</div>
-          <div class="eta-dist">잔여 ${distance}m</div>
-        `;
-      }
+      const dist = Math.round(new kakao.maps.Polyline({ path: [currentBusPos, new kakao.maps.LatLng(target.lat, target.lng)] }).getLength());
+      let timeText = (dist < 100) ? "도착예정" : `약 ${Math.round((dist * 1.3) / 333)}분`;
+      const box = document.getElementById('eta-' + selectedStopIndex);
+      if(box) box.innerHTML = `<div class="eta-time">${timeText}</div><div class="eta-dist">잔여 ${dist}m</div>`;
     }
 
+    function focusOnBus() { if (currentBusPos) map.panTo(currentBusPos); else alert("운행 대기 중입니다."); }
     window.onload = initMap;
   </script>
 </body>
