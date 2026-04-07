@@ -4,27 +4,35 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>기사용 - 운행 제어판</title>
+  
   <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.10.0/firebase-database-compat.js"></script>
+  
   <style>
+    /* 기존 UI 100% 유지 */
     body { font-family: -apple-system, sans-serif; background: #1a1a1a; color: white; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
     .container { width: 90%; max-width: 400px; text-align: center; }
     h1 { font-size: 24px; margin-bottom: 30px; color: #4CAF50; }
+    
     .route-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; }
     .route-card { background: #333; padding: 20px; border-radius: 15px; border: 3px solid transparent; cursor: pointer; transition: 0.3s; }
     .route-card.active { border-color: #4CAF50; background: #2e7d32; transform: scale(1.05); }
-    #startBtn { width: 100%; padding: 25px; font-size: 22px; font-weight: bold; border-radius: 50px; border: none; background: #4CAF50; color: white; cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
+    .route-card span { font-size: 18px; font-weight: bold; }
+
+    #startBtn { width: 100%; padding: 25px; font-size: 22px; font-weight: bold; border-radius: 50px; border: none; background: #4CAF50; color: white; cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.3); transition: 0.2s; }
     #startBtn.stop { background: #f44336; }
-    #status { margin-top: 25px; font-size: 14px; color: #aaa; }
+    #status { margin-top: 25px; font-size: 14px; color: #aaa; line-height: 1.5; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>🚌 스쿨버스 운행 관리</h1>
+    
     <div class="route-selector">
       <div class="route-card active" id="card-1" onclick="selectRoute('1호차')"><span>1호차</span></div>
       <div class="route-card" id="card-2" onclick="selectRoute('2호차')"><span>2호차</span></div>
     </div>
+
     <button id="startBtn" onclick="toggleTracking()">위치 전송 시작</button>
     <div id="status">현재 대기 중</div>
   </div>
@@ -43,6 +51,7 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
+
     let watchId = null;
     let selectedRoute = "1호차";
 
@@ -56,19 +65,41 @@
     function toggleTracking() {
       const btn = document.getElementById('startBtn');
       const status = document.getElementById('status');
-      
+
       if (!watchId) {
+        // 운행 시작: GPS 추적 (속도 포함)
         watchId = navigator.geolocation.watchPosition(p => {
-          const updates = { lat: p.coords.latitude, lng: p.coords.longitude, lastUpdate: Date.now() };
+          
+          // ★ 추가된 핵심 로직: m/s 로 들어오는 속도를 km/h로 변환 (속도값이 없으면 0으로 처리)
+          const speedKmh = p.coords.speed ? Math.round(p.coords.speed * 3.6) : 0;
+          
+          const updates = { 
+            lat: p.coords.latitude, 
+            lng: p.coords.longitude, 
+            speed: speedKmh, // 파이어베이스에 실시간 속도 저장
+            lastUpdate: Date.now() 
+          };
+          
           db.ref('buses/' + selectedRoute).set(updates);
-          status.innerHTML = `<span style="color:#4CAF50">● ${selectedRoute} 전송 중</span>`;
-        }, err => alert("GPS를 켜주세요."), { enableHighAccuracy: true });
+          
+          // 기사님 화면에도 현재 속도 표시
+          status.innerHTML = `<span style="color:#4CAF50">● ${selectedRoute} 전송 중</span><br><small>현재 속도: <b>${speedKmh} km/h</b></small>`;
+          
+        }, err => {
+          alert("GPS를 켜주세요. (오류: " + err.message + ")");
+        }, { 
+          enableHighAccuracy: true,
+          maximumAge: 0, 
+          timeout: 5000 
+        });
+        
         btn.innerText = "운행 종료";
         btn.classList.add('stop');
       } else {
-        // 운행 종료 시 데이터 삭제 로직 포함
+        // 운행 종료: 파이어베이스에서 버스 위치 데이터 완전히 삭제 (유저 화면에서 버스 사라짐)
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
+        
         db.ref('buses/' + selectedRoute).remove().then(() => {
           btn.innerText = "위치 전송 시작";
           btn.classList.remove('stop');
