@@ -84,7 +84,6 @@
     let currentBusPos = null;
     let stopsData = [];
     
-    // ★ 추가: 이전 감시 카메라를 끄기 위한 변수 ★
     let busRef = null;
     let stopsRef = null;
 
@@ -97,7 +96,6 @@
       if (currentRoute === route) return;
       currentRoute = route;
       
-      // UI 즉시 초기화
       document.getElementById('list-title').innerText = route + " 노선 목록";
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.getElementById(id).classList.add('active');
@@ -113,28 +111,33 @@
     }
 
     function listenData() {
-      // ★ 해결 포인트: 기존 노선의 실시간 감시를 중단합니다 (.off) ★
       if (busRef) busRef.off();
       if (stopsRef) stopsRef.off();
 
-      // 새로운 노선의 데이터베이스 경로 설정
       busRef = db.ref('buses/' + currentRoute);
       stopsRef = db.ref('stops/' + currentRoute);
 
-      // 1. 정류장 목록 불러오기
       stopsRef.on('value', (snap) => {
         stopsData = snap.val() || [];
         createStopListUI(); 
         updateBusTracking(); 
       });
 
-      // 2. 버스 실시간 위치 불러오기
       busRef.on('value', (snap) => {
         const data = snap.val();
         const badge = document.getElementById('bus-status');
         const tag = document.getElementById('update-tag');
         
+        // ★ [안전장치 추가] 기사님이 앱을 그냥 껐을 경우를 대비해 10분(600,000ms) 유효기간 설정
+        let isDataValid = false;
         if (data) {
+          const timeDiff = Date.now() - data.lastUpdate;
+          if (timeDiff < 600000) { 
+            isDataValid = true; 
+          }
+        }
+        
+        if (isDataValid) {
           currentBusPos = new kakao.maps.LatLng(data.lat, data.lng);
           if (!busMarker) busMarker = new kakao.maps.Marker({ position: currentBusPos, map: map });
           else busMarker.setPosition(currentBusPos);
@@ -143,6 +146,7 @@
           badge.style.background = "#4CAF50";
           tag.innerText = "최근 갱신: " + new Date(data.lastUpdate).toLocaleTimeString();
         } else {
+          // 데이터가 없거나 10분이 지난 좀비 데이터일 경우 강제 종료 처리
           if (busMarker) { busMarker.setMap(null); busMarker = null; }
           currentBusPos = null;
           badge.innerText = "운행 종료"; 
