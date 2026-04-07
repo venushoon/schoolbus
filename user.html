@@ -24,7 +24,7 @@
     
     .stop-list { display: flex; flex-direction: column; gap: 10px; position: relative; }
     .stop-item { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; display: flex; align-items: center; transition: 0.2s; }
-    .stop-item.passed { background: #f9f9f9; opacity: 0.6; } /* 지나간 정류장 스타일 */
+    .stop-item.passed { background: #f9f9f9; opacity: 0.6; }
     
     .stop-index { width: 24px; height: 24px; background: #eee; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 15px; color: #666; }
     .stop-info { flex-grow: 1; }
@@ -35,7 +35,6 @@
     
     .update-tag { position: absolute; top: 10px; right: 10px; z-index: 10; background: rgba(255,255,255,0.9); padding: 5px 10px; border-radius: 5px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
-    /* 동적 버스 행 스타일 */
     .bus-position-row {
       display: flex; align-items: center; justify-content: center;
       background: #fff9c4; padding: 10px; border-radius: 10px;
@@ -60,7 +59,7 @@
   <div class="content-area">
     <div class="info-header">
       <h2 style="margin:0; font-size: 20px;" id="list-title">1호차 노선 목록</h2>
-      <div class="status-badge" id="bus-status">운행 종료</div>
+      <div class="status-badge" id="bus-status">상태 확인 중...</div>
     </div>
     <div id="stop-list" class="stop-list"></div>
   </div>
@@ -84,6 +83,10 @@
     let currentRoute = "1호차";
     let currentBusPos = null;
     let stopsData = [];
+    
+    // ★ 추가: 이전 감시 카메라를 끄기 위한 변수 ★
+    let busRef = null;
+    let stopsRef = null;
 
     function initMap() {
       map = new kakao.maps.Map(document.getElementById('map'), { center: new kakao.maps.LatLng(36.82, 127.10), level: 5 });
@@ -93,25 +96,40 @@
     function changeRoute(route, id) {
       if (currentRoute === route) return;
       currentRoute = route;
+      
+      // UI 즉시 초기화
       document.getElementById('list-title').innerText = route + " 노선 목록";
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.getElementById(id).classList.add('active');
       
+      document.getElementById('bus-status').innerText = "상태 확인 중...";
+      document.getElementById('bus-status').style.background = "#888";
+      document.getElementById('update-tag').innerText = "데이터 불러오는 중...";
+      
       if (busMarker) { busMarker.setMap(null); busMarker = null; }
       currentBusPos = null;
+      
       listenData();
     }
 
     function listenData() {
-      // 1. 정류장 목록 불러오기 (한 번 불러오면 뼈대 생성)
-      db.ref('stops/' + currentRoute).on('value', (snap) => {
+      // ★ 해결 포인트: 기존 노선의 실시간 감시를 중단합니다 (.off) ★
+      if (busRef) busRef.off();
+      if (stopsRef) stopsRef.off();
+
+      // 새로운 노선의 데이터베이스 경로 설정
+      busRef = db.ref('buses/' + currentRoute);
+      stopsRef = db.ref('stops/' + currentRoute);
+
+      // 1. 정류장 목록 불러오기
+      stopsRef.on('value', (snap) => {
         stopsData = snap.val() || [];
-        createStopListUI(); // 뼈대만 다시 그림
-        updateBusTracking(); // 버스 위치에 따른 갱신
+        createStopListUI(); 
+        updateBusTracking(); 
       });
 
       // 2. 버스 실시간 위치 불러오기
-      db.ref('buses/' + currentRoute).on('value', (snap) => {
+      busRef.on('value', (snap) => {
         const data = snap.val();
         const badge = document.getElementById('bus-status');
         const tag = document.getElementById('update-tag');
@@ -121,21 +139,21 @@
           if (!busMarker) busMarker = new kakao.maps.Marker({ position: currentBusPos, map: map });
           else busMarker.setPosition(currentBusPos);
           
-          badge.innerText = "운행 중"; badge.style.background = "#4CAF50";
+          badge.innerText = "운행 중"; 
+          badge.style.background = "#4CAF50";
           tag.innerText = "최근 갱신: " + new Date(data.lastUpdate).toLocaleTimeString();
         } else {
           if (busMarker) { busMarker.setMap(null); busMarker = null; }
           currentBusPos = null;
-          badge.innerText = "운행 종료"; badge.style.background = "#888";
+          badge.innerText = "운행 종료"; 
+          badge.style.background = "#888";
           tag.innerText = "현재 운행하지 않음";
         }
         
-        // 데이터가 들어올 때마다 시간/거리/이모지 로직만 업데이트 (화면 깜빡임 방지)
         updateBusTracking(); 
       });
     }
 
-    // 정류장 목록의 뼈대(DOM)를 생성하는 함수
     function createStopListUI() {
       const list = document.getElementById('stop-list');
       list.innerHTML = '';
@@ -160,14 +178,12 @@
       });
     }
 
-    // ★ [핵심] 순차적 누적 거리 및 버스 이모지 위치를 업데이트하는 함수 ★
     function updateBusTracking() {
       if (stopsData.length === 0) return;
 
       const oldBusRow = document.getElementById('dynamic-bus');
       if (oldBusRow) oldBusRow.remove();
 
-      // 운행 종료 상태면 모든 ETA 초기화 후 종료
       if (!currentBusPos) {
         stopsData.forEach((_, i) => {
           document.getElementById('eta-' + i).innerHTML = '';
@@ -176,7 +192,6 @@
         return;
       }
 
-      // 1. 현재 버스와 가장 가까운 '다음 정류장' 찾기
       let nearestIdx = 0;
       let minDist = Infinity;
       stopsData.forEach((s, i) => {
@@ -184,7 +199,6 @@
         if (d < minDist) { minDist = d; nearestIdx = i; }
       });
 
-      // 2. 버스 이모지 행 삽입 (가장 가까운 정류장 바로 앞)
       const listContainer = document.getElementById('stop-list');
       const targetRow = document.getElementById('stop-row-' + nearestIdx);
       if (targetRow) {
@@ -195,40 +209,31 @@
         listContainer.insertBefore(busRow, targetRow);
       }
 
-      // 3. 노선 순서에 따른 누적 거리 계산 및 UI 적용
       stopsData.forEach((s, i) => {
         const etaBox = document.getElementById('eta-' + i);
         const rowBox = document.getElementById('stop-row-' + i);
         if (!etaBox || !rowBox) return;
 
         if (i < nearestIdx) {
-          // 이미 지나간 정류장
           rowBox.classList.add('passed');
           etaBox.innerHTML = `<span style="color:#999; font-size:12px; font-weight:bold;">운행 통과</span>`;
         } 
         else if (i === nearestIdx) {
-          // 버스가 현재 향하고 있는 정류장 (직선 거리)
           rowBox.classList.remove('passed');
           const dist = getDistance(currentBusPos.getLat(), currentBusPos.getLng(), s.lat, s.lng);
           etaBox.innerHTML = formatETA(dist);
         } 
         else {
-          // 그 이후 정류장들 (순차적 누적 거리 계산)
           rowBox.classList.remove('passed');
-          
-          // 누적 거리 = (버스와 가까운정류장 거리) + (가까운정류장부터 타겟정류장까지 노선 거리)
           let totalDist = getDistance(currentBusPos.getLat(), currentBusPos.getLng(), stopsData[nearestIdx].lat, stopsData[nearestIdx].lng);
-          
           for (let j = nearestIdx; j < i; j++) {
             totalDist += getDistance(stopsData[j].lat, stopsData[j].lng, stopsData[j+1].lat, stopsData[j+1].lng);
           }
-          
           etaBox.innerHTML = formatETA(totalDist);
         }
       });
     }
 
-    // 거리 계산 함수 (단위: 미터)
     function getDistance(lat1, lon1, lat2, lon2) {
       const R = 6371;
       const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -237,13 +242,12 @@
                 Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
                 Math.sin(dLon/2) * Math.sin(dLon/2);
       const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return Math.round(km * 1000); // 미터로 반환
+      return Math.round(km * 1000); 
     }
 
-    // ETA 텍스트 포맷팅 함수
     function formatETA(distMeter) {
       if (distMeter < 150) return `<div class="eta-time">도착/정차</div>`;
-      const minutes = Math.round((distMeter * 1.3) / 333); // 가중치 적용, 시속 20km 기준
+      const minutes = Math.round((distMeter * 1.3) / 333); 
       return `<div class="eta-time">약 ${minutes}분</div><span class="eta-dist">잔여 ${distMeter}m</span>`;
     }
 
